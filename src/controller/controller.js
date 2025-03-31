@@ -85,7 +85,7 @@ class RouterController {
 
   async deleteTeam(req, res) {
     try {
-      const { id } = req.body;
+      const { teamId } = req.body;
       const contentFile = await fsPromises.readFile(
         path.join(__dirname, "../data/teams.txt"),
         { encoding: "utf-8" }
@@ -93,12 +93,12 @@ class RouterController {
 
       let teams = contentFile.split("|").filter(Boolean).map(JSON.parse);
 
-      const teamToDelete = teams.find((team) => team.id === id);
+      const teamToDelete = teams.find((team) => team.id === teamId);
       if (!teamToDelete) {
         return res.status(404).json({ error: "Team not found" });
       }
 
-      teams = teams.filter((team) => team.id !== id);
+      teams = teams.filter((team) => team.id !== teamId);
 
       const updatedContent =
         teams.map((team) => JSON.stringify(team)).join("|") + "|";
