@@ -16,6 +16,7 @@ class RouterController {
       res.status(500).json({ error: "Internal Server Error" });
     }
   }
+
   async createTeam(req, res) {
     try {
       const {
@@ -25,12 +26,26 @@ class RouterController {
         engineeringArchitectId,
       } = req.body;
 
-      [projectLeaderId, accountManagerId, engineeringArchitectId].forEach(
-        (id) => {
-          const member = members.find((m) => m.id == id);
-          if (member) member.inTeam = true;
-        }
+      if (!projectLeaderId || !accountManagerId || !engineeringArchitectId) {
+        return res.status(400).json({
+          error:
+            "Missing required member IDs: projectLeaderId, accountManagerId, or engineeringArchitectId",
+        });
+      }
+
+      const alreadyInTeam = members.some(
+        (member) =>
+          (member.id === projectLeaderId ||
+            member.id === accountManagerId ||
+            member.id === engineeringArchitectId) &&
+          member.inTeam
       );
+
+      if (alreadyInTeam) {
+        return res.status(400).json({
+          error: "One or more members are already assigned to another team.",
+        });
+      }
 
       const newTeam = {
         id: uuidv4(),
@@ -40,14 +55,24 @@ class RouterController {
         engineeringArchitectId,
       };
 
+      members.forEach((member) => {
+        if (
+          member.id === projectLeaderId ||
+          member.id === accountManagerId ||
+          member.id === engineeringArchitectId
+        ) {
+          member.inTeam = true;
+        }
+      });
+
       await fsPromises.appendFile(
         path.join(__dirname, "../data/teams.txt"),
         `${JSON.stringify(newTeam)}|`
       );
 
-      return res.status(200).send("ok");
+      return res.status(200).send("Team created successfully");
     } catch (error) {
-      console.log("error creating team", error);
+      console.log("Error creating team", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
   }
@@ -86,31 +111,45 @@ class RouterController {
   async deleteTeam(req, res) {
     try {
       const { teamId } = req.body;
+
       const contentFile = await fsPromises.readFile(
         path.join(__dirname, "../data/teams.txt"),
         { encoding: "utf-8" }
       );
 
-      let teams = contentFile.split("|").filter(Boolean).map(JSON.parse);
+      let teams = contentFile.split("|").filter(Boolean);
 
-      const teamToDelete = teams.find((team) => team.id === teamId);
-      if (!teamToDelete) {
+      const teamIndex = teams.findIndex(
+        (team) => JSON.parse(team).id === teamId
+      );
+
+      if (teamIndex === -1) {
         return res.status(404).json({ error: "Team not found" });
       }
 
-      teams = teams.filter((team) => team.id !== teamId);
+      teams.splice(teamIndex, 1);
 
-      const updatedContent =
-        teams.map((team) => JSON.stringify(team)).join("|") + "|";
+      const deletedTeam = JSON.parse(teams[teamIndex]);
+      const memberIds = [
+        deletedTeam.projectLeaderId,
+        deletedTeam.accountManagerId,
+        deletedTeam.engineeringArchitectId,
+      ];
+
+      members.forEach((member) => {
+        if (memberIds.includes(member.id)) {
+          member.inTeam = false;
+        }
+      });
+
       await fsPromises.writeFile(
         path.join(__dirname, "../data/teams.txt"),
-        updatedContent,
-        "utf-8"
+        teams.join("|")
       );
 
-      return res.status(200).json({ message: "Team deleted successfully" });
+      return res.status(200).send("Team deleted successfully");
     } catch (error) {
-      console.error("Error deleting team", error);
+      console.log("Error deleting team", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
   }
